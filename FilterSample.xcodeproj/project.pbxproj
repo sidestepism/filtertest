@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		F90370A61C874A0C001004DC /* WaveformVisualizerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F90370A51C874A0B001004DC /* WaveformVisualizerView.swift */; };
 		F95C45A21C85FFA6009FA852 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F95C45A11C85FFA6009FA852 /* AppDelegate.swift */; };
 		F95C45A41C85FFA6009FA852 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F95C45A31C85FFA6009FA852 /* ViewController.swift */; };
 		F95C45A71C85FFA6009FA852 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = F95C45A51C85FFA6009FA852 /* Main.storyboard */; };
@@ -64,6 +65,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		F90370A51C874A0B001004DC /* WaveformVisualizerView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = WaveformVisualizerView.swift; sourceTree = "<group>"; };
 		F95C459E1C85FFA6009FA852 /* FilterSample.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FilterSample.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F95C45A11C85FFA6009FA852 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		F95C45A31C85FFA6009FA852 /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
@@ -159,6 +161,7 @@
 			children = (
 				F95C45A11C85FFA6009FA852 /* AppDelegate.swift */,
 				F95C45A31C85FFA6009FA852 /* ViewController.swift */,
+				F90370A51C874A0B001004DC /* WaveformVisualizerView.swift */,
 				F95C45A51C85FFA6009FA852 /* Main.storyboard */,
 				F95C45A81C85FFA6009FA852 /* Assets.xcassets */,
 				F95C45CF1C85FFBE009FA852 /* AppIcons */,
@@ -396,6 +399,7 @@
 			files = (
 				F95C45A41C85FFA6009FA852 /* ViewController.swift in Sources */,
 				F95C460B1C860791009FA852 /* CPTColor.swift in Sources */,
+				F90370A61C874A0C001004DC /* WaveformVisualizerView.swift in Sources */,
 				F95C460D1C860791009FA852 /* SwiftFilePath+extension.swift in Sources */,
 				F95C45A21C85FFA6009FA852 /* AppDelegate.swift in Sources */,
 				F95C46031C86072F009FA852 /* AudioEngineManager.swift in Sources */,

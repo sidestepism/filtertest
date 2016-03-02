@@ -8,6 +8,7 @@
 
 import UIKit
 import AVFoundation
+import Accelerate
 
 class AudioEngineManager: NSObject {
     
@@ -20,6 +21,10 @@ class AudioEngineManager: NSObject {
     
     var recording = false
     var playing = false
+    var analyzing = false
+
+    var spectrum = [Float](count: 10000, repeatedValue: 0.0)
+
     var playerVolume: Float {
         get { return player.volume }
         set { player.volume = newValue }
@@ -42,11 +47,21 @@ class AudioEngineManager: NSObject {
     
     var inputLevel:Double = 0.0
     var averageInputLevel:Double = 0.0
-    
+
     var speechDetecting = false
     var concurrentSilentFrames = 0
     let equalizer = AVAudioUnitEQ(numberOfBands: 1)
     
+    // 算出した基本周波数
+    var targetf0 = 440.0
+
+    var analyzedf0 = 110.0
+    var analyzedPitchshift = 2400.0
+    var analyzingMutex = false
+
+    var pitchDetectionInputLevelThreshold = 0.0005
+    
+
     var speechDetectionOnInputLevelThreshold = 0.0002
     var speechDetectionOffInputLevelThreshold: Double {
         get {
@@ -104,6 +119,11 @@ class AudioEngineManager: NSObject {
             if self.recording {
                 self.updateRecording(buffer, when: when)
             }
+            if self.analyzing {
+                self.updateAnalyzing(buffer, when: when)
+            }
+//            NSLog("frameLength: %d", buffer.frameLength)
+            buffer.frameLength = size
         }
     }
     
@@ -115,6 +135,13 @@ class AudioEngineManager: NSObject {
         }
         self.inputLevel /= Double(frameLength)
         self.inputLevelUpdated()
+    }
+    
+    func startAnalyzing() {
+        self.analyzing = true
+    }
+    func stopAnalyzing() {
+        self.analyzing = false
     }
     
     func inputLevelUpdated() {
@@ -157,6 +184,111 @@ class AudioEngineManager: NSObject {
             print(error)
         }
     }
+
+    func updateAnalyzing(buffer: AVAudioPCMBuffer, when: AVAudioTime) {
+        if inputLevel < pitchDetectionInputLevelThreshold {
+            return
+        }
+        if analyzingMutex {
+            return
+        }
+        analyzingMutex = true
+
+        let bufferSize: Int = Int(buffer.frameLength)
+
+        // Set up the transform
+        let log2n = UInt(round(log2(Double(bufferSize))))
+        let fftSetup = vDSP_create_fftsetup(log2n, Int32(kFFTRadix2))
+        
+        // Create the complex split value to hold the output of the transform
+        var realp = [Float](count: bufferSize/2, repeatedValue: 0)
+        var imagp = [Float](count: bufferSize/2, repeatedValue: 0)
+        var output = DSPSplitComplex(realp: &realp, imagp: &imagp)
+
+        var channelSamples: [DSPComplex] = []
+        let firstSample = 0
+        for var j=firstSample; j<bufferSize; j+=buffer.stride {
+            channelSamples.append(DSPComplex(real: buffer.floatChannelData.memory[j], imag: 0.0))
+        }
+        vDSP_ctoz(channelSamples, 2, &output, 1, UInt(bufferSize / 2))
+        
+        // Do the fast Fournier forward transform
+        vDSP_fft_zrip(fftSetup, &output, 1, log2n, Int32(FFT_FORWARD))
+
+        // Convert the complex output to magnitude
+        var mag = [Float](count:Int(bufferSize / 2), repeatedValue:0.0)
+        vDSP_zvmags(&output, 1, &mag, 1, vDSP_Length(bufferSize / 2))
+
+        channelSamples = []
+        for var j=0; j<bufferSize/2; j+=buffer.stride {
+            channelSamples.append(DSPComplex(real: mag[j], imag: 0.0))
+        }
+
+        vDSP_ctoz(channelSamples, 2, &output, 1, UInt(bufferSize / 2))
+        vDSP_fft_zrip(fftSetup, &output, 1, log2n, Int32(FFT_INVERSE))
+        
+        var autocorr_z = [DSPComplex](count: bufferSize/2, repeatedValue: DSPComplex(real: 0.0, imag: 0.0))
+        vDSP_ztoc(&output, 1, &autocorr_z, 2, vDSP_Length(bufferSize/2));
+        
+        var autocorr = [Float](count: bufferSize/2, repeatedValue: 0)
+        for var i = 0; i < bufferSize/2; i++ {
+            autocorr[i] = autocorr_z[i].real
+            if autocorr[0] != 0 {
+                autocorr[i] = autocorr[i] / autocorr[0]
+            }
+        }
+
+        for var i = 0; i < bufferSize/2; i++ {
+            autocorr[i] = autocorr[i] / autocorr[1]
+        }
+
+        var peak = false
+        var peakval: [Float] = [0.0]
+        var peakbin: [Int] = [0]
+        var peakbinK = 0
+
+        for var i = 44100/600; i < 44100/50; i++ {
+            if peak {
+                if autocorr[i] > peakval[peakbinK] {
+                    peakval[peakbinK] = autocorr[i]
+                    peakbin[peakbinK] = i
+                }
+                if autocorr[i] < 0 {
+                    peak = false
+                    peakbinK += 1
+                    peakval.append(0.0)
+                    peakbin.append(0)
+                }
+            }else{
+                if autocorr[i] > 0 {
+                    peak = true
+                }
+            }
+        }
+        
+        let peakss = peakval.maxElement() ?? 0
+        let peakt = ({() -> Int in
+            for var i = 0; i < peakbinK; i++ {
+//                NSLog("peakfreq = %4.1f, strength = %0.4f (peakss = %f)", 44100.0 / Double(peakbin[i]), peakval[i] / peakss, peakss)
+                if peakval[i] > peakss * 0.8 {
+                    return peakbin[i]
+                }
+            }
+            return 1
+        })()
+        
+        if peakt != 44100/50 && speechDetecting {
+            var freq: Double = 44100.0 / Double(peakt)
+            NSLog("freq = %4.1f", freq)
+            analyzedf0 += (freq - analyzedf0) * 0.4
+            analyzedPitchshift = log2(440 / analyzedf0) * Double(1200)
+        }
+    
+        spectrum = autocorr
+        vDSP_destroy_fftsetup(fftSetup)
+        analyzingMutex = false
+    }
+
     
     func startEngine() {
         if !engine.running {
